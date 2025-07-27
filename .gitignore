@@ -1,0 +1,12 @@
+*/__pycache__
+*/*/__pycache__
+.chromadb
+.env
+.DS_Store
+.vscode
+/venv
+venv
+*/venv
+logs/*
+mongo-init/*
+uploads/*
