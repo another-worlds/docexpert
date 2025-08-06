@@ -210,39 +210,97 @@ class YouTubeTranscriptHandler:
             return {"error": f"Failed to search transcripts: {str(e)}"}
     
     async def _fetch_transcript(self, video_id: str) -> Dict[str, Any]:
-        """Fetch transcript from YouTube API"""
+        """Fetch transcript from YouTube API with enhanced error handling"""
+        if not YouTubeTranscriptApi:
+            return {"error": "YouTube Transcript API not available. Install with: pip install youtube-transcript-api"}
+        
         try:
+            youtube_logger.info(f"🎥 Fetching transcript for video: {video_id}")
+            
             # Get available transcripts
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-            
-            # Try to get English transcript first, then any available
-            transcript = None
             try:
-                transcript = transcript_list.find_transcript(['en'])
-            except:
-                # Get first available transcript
-                for t in transcript_list:
-                    transcript = t
-                    break
+                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            except Exception as e:
+                error_msg = str(e)
+                if "private" in error_msg.lower():
+                    return {"error": "Video is private or restricted"}
+                elif "unavailable" in error_msg.lower() or "disabled" in error_msg.lower():
+                    return {"error": "Video is unavailable or has disabled transcripts"}
+                elif "not found" in error_msg.lower():
+                    return {"error": "Video not found"}
+                else:
+                    return {"error": f"Failed to access video: {error_msg}"}
             
+            # Try to get English transcript first, then other languages
+            transcript = None
+            language_priorities = ['en', 'en-US', 'en-GB', 'auto']
+            
+            # First try preferred languages
+            for lang in language_priorities:
+                try:
+                    transcript = transcript_list.find_transcript([lang])
+                    youtube_logger.info(f"✅ Found transcript in language: {lang}")
+                    break
+                except:
+                    continue
+            
+            # If no preferred language found, get any available transcript
+            if not transcript:
+                available_transcripts = []
+                for t in transcript_list:
+                    available_transcripts.append(t.language_code)
+                
+                youtube_logger.info(f"📋 Available transcript languages: {available_transcripts}")
+                
+                if available_transcripts:
+                    # Get the first available transcript
+                    transcript = transcript_list.find_transcript([available_transcripts[0]])
+                    youtube_logger.info(f"✅ Using available transcript: {available_transcripts[0]}")
+                else:
+                    return {"error": "No transcripts available for this video"}
+
             if not transcript:
                 return {"error": "No transcript available for this video"}
-            
+
             # Fetch the actual transcript
             transcript_data = transcript.fetch()
             
-            youtube_logger.info(f"📝 Fetched transcript with {len(transcript_data)} entries")
+            if not transcript_data:
+                return {"error": "Transcript data is empty"}
+            
+            youtube_logger.info(f"📝 Fetched transcript with {len(transcript_data)} entries in {transcript.language_code}")
+            
+            # Try to get video metadata (basic info from transcript API)
+            video_title = f"YouTube Video {video_id}"
+            
+            # Some transcripts might have video title in metadata
+            try:
+                if hasattr(transcript, 'video_title'):
+                    video_title = transcript.video_title
+            except:
+                pass
             
             return {
                 "transcript": transcript_data,
                 "language": transcript.language_code,
-                "title": f"YouTube Video {video_id}",  # We'd need YouTube Data API for real title
-                "description": ""
+                "title": video_title,
+                "description": "",
+                "video_id": video_id
             }
             
         except Exception as e:
-            youtube_logger.error(f"❌ Failed to fetch transcript: {str(e)}")
-            return {"error": f"Failed to fetch transcript: {str(e)}"}
+            error_msg = str(e)
+            youtube_logger.error(f"❌ Failed to fetch transcript: {error_msg}")
+            
+            # Provide more specific error messages
+            if "No transcripts were found" in error_msg:
+                return {"error": "No transcripts available for this video"}
+            elif "Could not retrieve a transcript" in error_msg:
+                return {"error": "Transcript could not be retrieved (may be disabled)"}
+            elif "HTTP Error 404" in error_msg:
+                return {"error": "Video not found"}
+            else:
+                return {"error": f"Failed to fetch transcript: {error_msg}"}
     
     async def _process_transcript_chunks(self, transcript_data: List[Dict], video_id: str) -> List[TranscriptChunk]:
         """Process transcript into chunks suitable for embedding"""

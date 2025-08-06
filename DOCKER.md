@@ -1,103 +1,175 @@
-# Docker Setup Guide
+# Docker Deployment Guide
 
-This document provides instructions for setting up and running the Telegram Multi-Agent AI Bot using Docker.
+This document provides comprehensive instructions for deploying DocExpert using Docker and Docker Compose.
 
 ## Quick Start
 
-### 1. Environment Setup
+### 1. Prerequisites
 ```bash
-# Copy the example environment file
-cp .env.example .env
+# Ensure Docker and Docker Compose are installed
+docker --version
+docker-compose --version
+
+# Clone the repository
+git clone <repository-url>
+cd docexpert
+```
+
+### 2. Environment Setup
+```bash
+# Run setup script (creates directories and .env template)
+./setup.sh
 
 # Edit .env with your actual values
 nano .env
 ```
 
 Required environment variables:
-- `TELEGRAM_BOT_TOKEN`: Your Telegram bot token from @BotFather
-- `XAI_API_KEY`: Your xAI (X.AI) API key
+- `TELEGRAM_BOT_TOKEN`: Your Telegram bot token from [@BotFather](https://t.me/botfather)
+- `XAI_API_KEY`: Your xAI API key from [xAI Console](https://console.x.ai/)
+- `HUGGINGFACE_API_KEY`: Your HuggingFace API key
+- `MONGODB_URI`: MongoDB Atlas connection string
 
-### 2. Build and Run
+### 3. Deploy
 ```bash
-# Build and start all services
-make docker-run
+# Standard deployment
+make run
 
-# Or manually with docker-compose
-docker-compose up -d
+# Development deployment (with hot reload)
+make dev
+
+# Production deployment (with Nginx and optimizations)
+make prod
 ```
 
-### 3. Check Status
+### 4. Verify Deployment
 ```bash
-# View bot logs
-make docker-logs
+# Check service status
+make status
 
-# View all services logs
-make docker-logs-all
+# View logs
+make logs
 
-# Check health
+# Test health endpoint
 curl http://localhost:8000/health
+
+# Test MongoDB Atlas connection
+python test_mongodb_atlas.py
 ```
 
 ## Available Services
 
 | Service | Port | Description |
 |---------|------|-------------|
-| telegram-bot | 8000 | Main bot application |
-| mongodb | 27017 | MongoDB database |
-| mongo-express | 8081 | MongoDB admin UI (optional) |
+| telegram-bot | 8000 | Main bot application with FastAPI |
+| nginx (prod only) | 80/443 | Reverse proxy for production |
 
-## Access Points
+**Note**: This project uses **MongoDB Atlas** (cloud database) instead of local MongoDB containers.
 
-- **Bot API**: http://localhost:8000
-- **Health Check**: http://localhost:8000/health
-- **MongoDB Admin**: http://localhost:8081 (admin/pass)
+## Deployment Environments
 
-## Docker Commands
-
-### Development
+### Development Environment
 ```bash
-# Start in development mode (with auto-reload)
-docker-compose -f docker-compose.dev.yml up
+# Start development environment
+make dev
 
-# Build without cache
-docker-compose build --no-cache
+# Features:
+# - Hot reload on code changes
+# - Debug logging enabled
+# - Volume mounted for live editing
+# - Faster startup times
 ```
 
-### Production
+### Production Environment
+```bash
+# Start production environment
+make prod
+
+# Features:
+# - Nginx reverse proxy
+# - Optimized Docker images
+# - Resource limits
+# - Log rotation
+# - Health checks
+# - Security hardening
+```
+
+### Standard Environment
+```bash
+# Start standard environment
+make run
+
+# Features:
+# - Basic Docker Compose setup
+# - Good for testing and staging
+# - Health checks enabled
+# - Volume persistence
+```
+
+## Docker Commands Reference
+
+### Basic Operations
 ```bash
 # Start services
-make docker-run
+make run              # Standard environment
+make dev             # Development environment  
+make prod            # Production environment
 
 # Stop services
-make docker-stop
-
-# Restart bot only
-make docker-restart
+make stop            # Stop all services
+make dev-stop        # Stop development environment
+make prod-stop       # Stop production environment
 
 # View logs
-make docker-logs
+make logs            # Application logs
+make dev-logs        # Development logs
+make prod-logs       # Production logs
 
-# Clean up everything
-make docker-clean
+# Health and status
+make health          # Check service health
+make status          # Show service status
 ```
 
-### Maintenance
+### Advanced Operations
 ```bash
-# Remove stopped containers and unused images
-docker system prune
+# Build operations
+make build           # Build production images
+docker-compose build --no-cache  # Force rebuild
 
-# Remove all volumes (WARNING: data loss)
-docker-compose down -v
+# Cleanup operations
+make clean           # Clean Python cache
+docker system prune -f  # Clean Docker resources
+docker-compose down -v  # Remove all volumes
 
-# Rebuild from scratch
-make docker-clean
-make docker-build
-make docker-run
+# Maintenance
+make restart         # Restart services
+docker-compose pull  # Update base images
 ```
+
+## Configuration Files
+
+### docker-compose.yml (Standard)
+- Basic deployment configuration
+- Suitable for testing and staging
+- Uses local volume mounts
+- Health checks enabled
+
+### docker-compose.dev.yml (Development)
+- Hot reload configuration
+- Debug logging
+- Live code mounting
+- Development optimizations
+
+### docker-compose.production.yml (Production)
+- Production-ready configuration
+- Nginx reverse proxy
+- Resource limits and reservations
+- Enhanced security settings
+- Log aggregation (optional)
 
 ## Environment Variables
 
-### Required
+### Required Configuration
 ```env
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 XAI_API_KEY=your_xai_api_key

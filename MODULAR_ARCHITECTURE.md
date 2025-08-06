@@ -2,52 +2,85 @@
 
 ## Overview
 
-This document describes the modular architecture implementation that separates Telegram logic from AI/LangChain logic for better maintainability and extensibility.
+DocExpert implements a clean, modular architecture that separates concerns across different layers while maintaining high cohesion within each module. This design enables independent development, testing, and deployment of components while ensuring scalability and maintainability.
 
-## Architecture Structure
+## Architecture Principles
+
+### 1. Separation of Concerns
+- **Telegram Layer**: Pure Telegram API interactions
+- **AI Layer**: Intelligence and agent management
+- **Data Layer**: Database and storage operations
+- **Service Layer**: Business logic and orchestration
+
+### 2. Dependency Inversion
+- High-level modules don't depend on low-level modules
+- Both depend on abstractions (interfaces)
+- Dependencies are injected rather than created
+
+### 3. Single Responsibility
+- Each module has one clear purpose
+- Changes to one responsibility don't affect others
+- Easy to understand and maintain
+
+## Module Structure
 
 ### 1. AI Module (`app/ai/`)
 
-The AI module contains all LangChain and AI-related components:
+**Purpose**: Contains all AI and LangChain-related functionality
 
-#### Core Components:
+```python
+# Abstract base classes
+class AITool:
+    async def execute(self, query: str, context: Dict[str, Any]) -> str
+    
+class ConversationAgent:
+    async def process_message(self, message: str, user_id: str) -> AIResponse
 
-- **`base.py`**: Abstract base classes and interfaces
-  - `AITool`: Interface for AI tools
-  - `ConversationAgent`: Interface for conversation agents
-  - `MemoryManager`: Interface for memory management
-  - `AIResponse`: Standard response format
+class MemoryManager:
+    async def get_conversation_history(self, user_id: str) -> List[Message]
+    async def save_interaction(self, user_id: str, message: str, response: str)
+```
 
-- **`tools.py`**: Concrete AI tool implementations
-  - `DocumentQueryTool`: Query user documents
-  - `LanguageDetectionTool`: Detect message language
-  - `ConversationHistoryTool`: Retrieve conversation history
-  - Tool registry and factory functions
+**Components**:
 
-- **`memory.py`**: Memory management implementation
-  - `LangChainMemoryManager`: LangChain-based conversation memory
-  - Database integration for persistent memory
+#### `tools.py` - Specialized AI Tools
+```python
+class YouTubeTranscriptTool(AITool):
+    """Processes YouTube URLs and retrieves transcripts"""
+    
+class DocumentQueryTool(AITool):  
+    """Searches and queries user documents"""
+    
+class LanguageDetectionTool(AITool):
+    """Detects message language for processing"""
+```
 
-- **`agent.py`**: Main conversation agent
-  - `LangChainConversationAgent`: LangChain-based agent implementation
-  - Tool management and agent setup
-  - Message processing with context
+#### `agent.py` - Main Conversation Agent
+```python
+class LangChainConversationAgent:
+    """LangChain-based agent with tool integration"""
+    
+    def __init__(self, tools: List[AITool], memory: MemoryManager)
+    async def process_message(self, message: str, user_id: str) -> AIResponse
+```
 
-- **`service.py`**: AI service layer
-  - `AIMessageService`: High-level service for message processing
-  - Document context integration
-  - Conversation history management
+#### `memory.py` - Conversation Memory
+```python
+class LangChainMemoryManager:
+    """Manages conversation history and context"""
+    
+    async def get_conversation_history(self, user_id: str, limit: int = 10)
+    async def save_interaction(self, user_id: str, message: str, response: str)
+```
 
-### 2. Telegram Module (`app/telegram/`)
-
-The Telegram module focuses purely on Telegram API interactions:
-
-#### Components:
-
-- **`bot.py`**: Clean Telegram bot implementation
-  - Pure Telegram API handling
-  - Command handlers (`/start`, `/docs`, `/clear`, `/tools`)
-  - Document upload handling
+#### `service.py` - High-Level AI Service
+```python
+class AIMessageService:
+    """Orchestrates AI processing pipeline"""
+    
+    async def process_user_message(self, message: str, user_id: str, context: Dict)
+    async def analyze_document(self, document: Document, user_id: str)
+```
   - Message routing to AI service
 
 ### 3. Handlers (`app/handlers/`)
