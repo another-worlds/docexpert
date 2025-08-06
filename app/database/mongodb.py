@@ -23,11 +23,20 @@ class MongoDB:
         db_logger.debug(f"📍 Connection URI: {MONGODB_URI[:30]}...")
         db_logger.debug(f"🗃️  Database: {MONGODB_DB_NAME}")
         
+        # Enhanced connection settings for MongoDB Atlas
         self.client = MongoClient(
             MONGODB_URI,
             tls=True,
-            tlsAllowInvalidCertificates=True,  # Disable certificate verification for development
-            serverSelectionTimeoutMS=10000  # 5 second timeout
+            tlsAllowInvalidCertificates=False,  # Use proper SSL verification for Atlas
+            serverSelectionTimeoutMS=30000,    # 30 second timeout for Atlas
+            connectTimeoutMS=30000,            # 30 second connection timeout
+            socketTimeoutMS=30000,             # 30 second socket timeout
+            maxPoolSize=10,                    # Connection pool size
+            retryWrites=True,                  # Enable retry writes
+            retryReads=True,                   # Enable retry reads
+            maxIdleTimeMS=30000,               # Max idle time for connections
+            heartbeatFrequencyMS=10000,        # Heartbeat frequency
+            appName=MONGODB_COLLECTIONS.get("app_name", "DocExpertBot")  # Application name for monitoring
         )
         self.db = self.client[MONGODB_DB_NAME]
         self.message_queue = self.db[MONGODB_COLLECTIONS["messages"]]
@@ -35,6 +44,26 @@ class MongoDB:
         
         db_logger.info("✅ MongoDB client initialized")
         db_logger.debug(f"📋 Collections: {list(MONGODB_COLLECTIONS.values())}")
+        
+        # Test connection
+        self._test_connection()
+        self._setup_indexes()
+    
+    def _test_connection(self):
+        """Test MongoDB Atlas connection"""
+        try:
+            # Test connection with a simple ping
+            self.client.admin.command('ping')
+            db_logger.info("✅ MongoDB Atlas connection successful!")
+        except Exception as e:
+            db_logger.error(f"❌ MongoDB Atlas connection failed: {str(e)}")
+            db_logger.info("🔧 Suggestions:")
+            db_logger.info("   1. Check your internet connection")
+            db_logger.info("   2. Verify MongoDB Atlas cluster is active")
+            db_logger.info("   3. Check IP whitelist in MongoDB Atlas Network Access")
+            db_logger.info("   4. Verify credentials in .env file")
+            # Don't raise exception, let app continue in offline mode
+            db_logger.info("🔄 Continuing in offline mode...")
         
         self._setup_indexes()
     

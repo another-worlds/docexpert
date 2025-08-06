@@ -1,6 +1,6 @@
 # Telegram Multi-Agent AI Bot - Makefile
 .PHONY: help venv activate install run clean clean-venv clean-all docker-build docker-run docker-stop docker-logs docker-logs-all docker-restart docker-clean docker-dev migrate-to-hf
-.PHONY: dev dev-logs dev-stop build prod prod-logs prod-stop restart logs logs-db logs-all health status db-shell db-backup test test-logging security-scan setup-env up down ps
+.PHONY: dev dev-logs dev-stop build prod prod-logs prod-stop restart logs logs-atlas logs-all health status db-shell db-backup test test-logging security-scan setup-env up down ps
 
 VENV_NAME=venv
 PYTHON=python3
@@ -83,8 +83,7 @@ dev: ## Start development environment
 	docker-compose -f docker-compose.dev.yml up --build -d
 	@echo "✅ Development environment started!"
 	@echo "📱 Bot API: http://localhost:8000"
-	@echo "🗄️  MongoDB: localhost:27017"
-	@echo "🗄️  MongoDB: localhost:27017"
+	@echo "🗄️  MongoDB: Using MongoDB Atlas cloud database"
 
 dev-logs: ## View development logs
 	docker-compose -f docker-compose.dev.yml logs -f
@@ -121,8 +120,7 @@ run: ## Start standard environment (recommended)
 	docker-compose up --build -d
 	@echo "✅ Application started!"
 	@echo "📱 Bot API: http://localhost:8000"
-	@echo "🗄️  MongoDB: localhost:27017"
-	@echo "🌐 Mongo Express: http://localhost:8081"
+	@echo "🗄️  MongoDB: Using MongoDB Atlas cloud database"
 
 stop: ## Stop all services
 	@echo "🛑 Stopping all services..."
@@ -138,8 +136,12 @@ restart: ## Restart all services
 logs: ## View application logs
 	docker-compose logs -f telegram-bot
 
-logs-db: ## View database logs
-	docker-compose logs -f mongodb
+logs-db: ## View application logs (no local DB)
+	@echo "⚠️  No local MongoDB container - using MongoDB Atlas cloud"
+	@echo "📊 To monitor your MongoDB Atlas cluster:"
+	@echo "   1. Visit https://cloud.mongodb.com"
+	@echo "   2. Navigate to your cluster"
+	@echo "   3. Use the Monitoring tab for metrics and logs"
 
 logs-all: ## View all service logs
 	docker-compose logs -f
@@ -153,14 +155,26 @@ health: ## Check service health
 status: ## Show service status
 	docker-compose ps
 
-# Database operations
-db-shell: ## Access MongoDB shell
-	docker-compose exec mongodb mongosh -u admin -p password --authenticationDatabase admin
+# Database operations (MongoDB Atlas)
+db-shell: ## Access MongoDB Atlas via mongosh
+	@echo "🗄️  Connecting to MongoDB Atlas..."
+	@if [ -z "$$MONGODB_URI" ]; then \
+		echo "❌ MONGODB_URI environment variable not set"; \
+		echo "💡 Make sure to source your .env file or set MONGODB_URI"; \
+		exit 1; \
+	fi
+	mongosh "$$MONGODB_URI"
 
-db-backup: ## Backup database
-	@echo "💾 Creating database backup..."
-	docker-compose exec mongodb mongodump --uri="mongodb://admin:password@localhost:27017/telegram_bot?authSource=admin" --out=/data/backup
-	@echo "✅ Database backup created!"
+db-backup: ## Backup MongoDB Atlas database
+	@echo "💾 Creating MongoDB Atlas backup..."
+	@if [ -z "$$MONGODB_URI" ]; then \
+		echo "❌ MONGODB_URI environment variable not set"; \
+		echo "💡 Make sure to source your .env file or set MONGODB_URI"; \
+		exit 1; \
+	fi
+	@mkdir -p ./backups
+	mongodump --uri="$$MONGODB_URI" --out=./backups/$(shell date +%Y%m%d_%H%M%S)
+	@echo "✅ Database backup created in ./backups/"
 
 # Security and Testing
 security-scan: ## Run security scan on images

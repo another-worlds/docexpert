@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test script for YouTube Transcript Tool functionality.
+Test script for YouTube Transcript Tool functionality with improved environment handling.
 
 This script tests the YouTube transcript processing and search capabilities.
 """
@@ -9,6 +9,8 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+
+# Load environment variables FIRST before any app imports
 from dotenv import load_dotenv
 
 # Add project root to path
@@ -38,7 +40,46 @@ if missing_vars:
 else:
     print("✅ All required environment variables are loaded")
 
-# Test URLs for YouTube videos (replace with actual test URLs)
+def test_mongodb_connection():
+    """Test MongoDB Atlas connection"""
+    print("\n🗄️ Testing MongoDB Atlas connection...")
+    try:
+        from pymongo import MongoClient
+        
+        mongodb_uri = os.getenv('MONGODB_URI')
+        if not mongodb_uri:
+            print("❌ MONGODB_URI not set in environment")
+            return False
+            
+        client = MongoClient(
+            mongodb_uri,
+            serverSelectionTimeoutMS=10000,  # 10 second timeout for test
+            connectTimeoutMS=10000,
+            socketTimeoutMS=10000
+        )
+        
+        # Test with ping
+        client.admin.command('ping')
+        print("✅ MongoDB Atlas connection successful!")
+        
+        # Test database access
+        db = client[os.getenv('MONGODB_DB_NAME', 'telegram_bot')]
+        collections = db.list_collection_names()
+        print(f"📋 Available collections: {collections}")
+        
+        client.close()
+        return True
+        
+    except Exception as e:
+        print(f"❌ MongoDB Atlas connection failed: {str(e)}")
+        print("🔧 Common solutions:")
+        print("   1. Check your internet connection")
+        print("   2. Verify your IP is whitelisted in MongoDB Atlas Network Access")
+        print("   3. Ensure cluster is not paused in MongoDB Atlas")
+        print("   4. Verify credentials in .env file")
+        return False
+
+# Test URLs for YouTube videos
 TEST_YOUTUBE_URLS = [
     "https://www.youtube.com/watch?v=dQw4w9WgXcQ",  # Example URL
     "https://youtu.be/dQw4w9WgXcQ",  # Short URL format
@@ -46,7 +87,7 @@ TEST_YOUTUBE_URLS = [
 
 async def test_youtube_transcript_tool():
     """Test the YouTube transcript tool"""
-    print("🎥 Testing YouTube Transcript Tool...")
+    print("\n🎥 Testing YouTube Transcript Tool...")
     
     try:
         # Import after adding to path and loading environment
@@ -59,7 +100,7 @@ async def test_youtube_transcript_tool():
         print(f"✅ Tool created: {tool.name}")
         print(f"📝 Description: {tool.description}")
         
-        # Test context
+        # Test context with mock database for testing
         test_context = {
             "user_id": "test_user_123",
             "db": None  # This would normally be the database instance
@@ -73,7 +114,7 @@ async def test_youtube_transcript_tool():
             result = await tool.execute(test_query_with_url, test_context)
             print(f"✅ URL processing result: {result}")
         except Exception as e:
-            print(f"⚠️ Expected error (API/DB related): {e}")
+            print(f"⚠️ Expected error (API/network): {str(e)[:100]}...")
         
         print("\n🔍 Testing search query...")
         search_query = "Tell me about machine learning"
@@ -82,7 +123,7 @@ async def test_youtube_transcript_tool():
             result = await tool.execute(search_query, test_context)
             print(f"✅ Search result: {result}")
         except Exception as e:
-            print(f"⚠️ Expected error (API/DB related): {e}")
+            print(f"⚠️ Expected error (no data): {str(e)[:100]}...")
         
         print("🎉 YouTube Transcript Tool test completed!")
         return True
@@ -163,112 +204,56 @@ def test_youtube_model():
 
 def test_imports():
     """Test that all required imports work"""
-    print("📦 Testing imports...")
+    print("\n📦 Testing imports...")
     
-    # Test core modules first (these should work without API keys)
-    core_modules = [
+    required_modules = [
         "app.models.youtube",
-        "app.config"  # Test if config loads properly
-    ]
-    
-    for module in core_modules:
-        try:
-            __import__(module)
-            print(f"✅ {module}")
-        except ImportError as e:
-            print(f"❌ {module}: {e}")
-            return False
-        except Exception as e:
-            print(f"⚠️ {module}: {e}")
-    
-    # Test modules that may require API keys (more tolerant)
-    api_dependent_modules = [
-        "app.handlers.youtube",
+        "app.handlers.youtube", 
         "app.ai.tools"
     ]
     
-    for module in api_dependent_modules:
+    success_count = 0
+    for module in required_modules:
         try:
             __import__(module)
             print(f"✅ {module}")
+            success_count += 1
         except ImportError as e:
             print(f"❌ {module}: {e}")
-            return False
         except Exception as e:
-            # These might fail due to missing API keys, which is expected in tests
             print(f"⚠️ {module}: {e}")
-            if "api_key" in str(e).lower() or "xai" in str(e).lower():
-                print(f"   💡 This is likely due to missing API keys - continuing...")
-            continue
     
-    return True
-
-def check_environment():
-    """Check if environment is properly configured"""
-    print("🔍 Environment Check...")
-    
-    # Check if .env file exists
-    env_file = project_root / ".env"
-    if env_file.exists():
-        print(f"✅ .env file found at {env_file}")
-    else:
-        print(f"⚠️ .env file not found at {env_file}")
-        print("💡 Create .env file based on .env.example for full functionality")
-    
-    # Check environment variables
-    env_vars = {
-        "XAI_API_KEY": "xAI API for language model",
-        "HUGGINGFACE_API_KEY": "HuggingFace API for embeddings",
-        "MONGODB_URI": "MongoDB connection string"
-    }
-    
-    for var, description in env_vars.items():
-        value = os.getenv(var)
-        if value:
-            # Show only first few characters for security
-            masked_value = value[:8] + "..." if len(value) > 8 else value
-            print(f"✅ {var}: {masked_value} ({description})")
-        else:
-            print(f"❌ {var}: Not set ({description})")
-    
-    print()
+    return success_count == len(required_modules)
 
 async def main():
     """Run all tests"""
     print("YouTube Transcript Tool Test Suite")
     print("=" * 50)
     
-    # Check environment setup
-    check_environment()
+    # Test MongoDB connection first
+    mongo_ok = test_mongodb_connection()
     
-    # Test imports first
+    # Test imports
     if not test_imports():
-        print("\n❌ Critical import tests failed. Exiting.")
-        return
+        print("\n❌ Import tests failed. Some features may not work.")
     
-    # Test models (these should work without API keys)
+    # Test models
     if not test_youtube_model():
-        print("\n⚠️ Model tests failed.")
-    else:
-        print("\n✅ Model tests passed.")
+        print("\n❌ Model tests failed.")
     
-    # Test tool functionality (may have expected failures due to missing APIs)
-    print("\n" + "-" * 50)
+    # Test tool functionality
     if not await test_youtube_transcript_tool():
-        print("\n⚠️ Tool tests had issues (this may be expected without API keys).")
-    else:
-        print("\n✅ Tool tests passed.")
+        print("\n❌ Tool tests failed.")
     
     print("\n" + "=" * 50)
-    print("🎉 Test suite completed!")
-    print("\n📋 Summary:")
-    print("- ✅ Models work correctly")
-    print("- ✅ URL parsing and validation works") 
-    print("- ⚠️ Some API-dependent features require valid API keys")
-    print("\n💡 To test full functionality:")
-    print("1. Create .env file based on .env.example")
-    print("2. Add your API keys to .env")
-    print("3. Run the test again")
+    print("🎉 All tests completed!")
+    
+    if not mongo_ok:
+        print("\n⚠️ MongoDB connection failed - this may affect video transcript storage")
+        print("🔧 The tool will still work for processing, but won't persist data")
+    
+    print("\nNote: Some tests may show 'expected errors' due to API limitations")
+    print("or network connectivity. This is normal for unit testing.")
 
 if __name__ == "__main__":
     asyncio.run(main())
