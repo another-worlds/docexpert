@@ -162,31 +162,6 @@ db-backup: ## Backup database
 	docker-compose exec mongodb mongodump --uri="mongodb://admin:password@localhost:27017/telegram_bot?authSource=admin" --out=/data/backup
 	@echo "✅ Database backup created!"
 
-# Maintenance commands
-clean: ## Clean up Docker resources
-	@echo "🧹 Cleaning up Docker resources..."
-	docker-compose down -v --remove-orphans
-	docker system prune -f
-	docker volume prune -f
-	@echo "✅ Cleanup completed!"
-
-clean-all: ## Clean everything including images
-	@echo "🧹 Cleaning all Docker resources..."
-	docker-compose down -v --remove-orphans
-	docker system prune -af
-	docker volume prune -f
-	@echo "✅ Complete cleanup done!"
-
-# Testing
-test: ## Run tests in container
-	@echo "🧪 Running tests..."
-	docker-compose exec telegram-bot python -m pytest tests/ -v
-	@echo "✅ Tests completed!"
-
-test-logging: ## Test logging system
-	@echo "📝 Testing logging system..."
-	docker-compose exec telegram-bot python -c "from app.utils.logging import setup_logging; setup_logging(); print('✅ Logging system working!')"
-
 # Security and Testing
 security-scan: ## Run security scan on images
 	@echo "🔒 Running security scan..."
