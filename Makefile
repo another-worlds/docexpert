@@ -1,6 +1,6 @@
 # Telegram Multi-Agent AI Bot - Makefile
 .PHONY: help venv activate install run clean clean-venv clean-all docker-build docker-run docker-stop docker-logs docker-logs-all docker-restart docker-clean docker-dev migrate-to-hf
-.PHONY: dev dev-logs dev-stop build prod prod-logs prod-stop restart logs logs-atlas logs-all health status db-shell db-backup test test-logging security-scan setup-env up down ps
+.PHONY: dev dev-logs dev-stop build prod prod-logs prod-stop restart logs logs-atlas logs-all health status db-shell db-backup test test-logging security-scan setup setup-env up down ps
 
 VENV_NAME=venv
 PYTHON=python3
@@ -42,7 +42,11 @@ migrate-to-hf: ## Migrate to HuggingFace embeddings
 	@echo "Migration setup complete!"
 
 # Environment Setup
-setup-env: ## Setup environment file
+setup: ## Setup environment and directories
+	@echo "🚀 Setting up DocExpert Bot environment..."
+	@./setup.sh
+
+setup-env: ## Setup environment file only
 	@if [ ! -f .env ]; then \
 		echo "📝 Creating .env file from template..."; \
 		cp .env.example .env 2>/dev/null || echo "TELEGRAM_BOT_TOKEN=\nXAI_API_KEY=\nHUGGINGFACE_API_KEY=\nLOG_LEVEL=INFO" > .env; \

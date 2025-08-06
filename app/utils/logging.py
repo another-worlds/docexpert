@@ -32,22 +32,41 @@ def setup_logging():
     # Clear existing handlers
     root_logger.handlers.clear()
     
-    # Console handler
+    # Console handler (always available)
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(simple_formatter)
     root_logger.addHandler(console_handler)
     
-    # File handler for all logs
-    file_handler = logging.handlers.RotatingFileHandler(
-        filename=os.path.join(LOGS_DIR, "bot.log"),
-        maxBytes=10*1024*1024,  # 10MB
-        backupCount=5,
-        encoding='utf-8'
-    )
-    file_handler.setLevel(getattr(logging, LOG_LEVEL.upper()))
-    file_handler.setFormatter(detailed_formatter)
-    root_logger.addHandler(file_handler)
+    # File handler for all logs (with permission error handling)
+    try:
+        # Ensure logs directory exists
+        os.makedirs(LOGS_DIR, exist_ok=True)
+        
+        # Test write permissions
+        test_file = os.path.join(LOGS_DIR, "bot.log")
+        with open(test_file, 'a') as f:
+            pass  # Test if we can open for writing
+        
+        file_handler = logging.handlers.RotatingFileHandler(
+            filename=test_file,
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=5,
+            encoding='utf-8'
+        )
+        file_handler.setLevel(getattr(logging, LOG_LEVEL.upper()))
+        file_handler.setFormatter(detailed_formatter)
+        root_logger.addHandler(file_handler)
+        
+        print(f"✅ File logging enabled: {test_file}")
+        
+    except (PermissionError, OSError) as e:
+        print(f"⚠️ Cannot write to log file: {e}")
+        print("📝 Using console logging only")
+        print("💡 To enable file logging:")
+        print("   1. Check directory permissions")
+        print("   2. Run with appropriate user permissions")
+        print("   3. Or mount logs as a volume in Docker")
     
     # Separate handlers for specific components
     setup_component_loggers(detailed_formatter)
@@ -61,77 +80,94 @@ def setup_logging():
 def setup_component_loggers(formatter):
     """Setup specialized loggers for different components"""
     
-    # Document processing logger
-    doc_logger = logging.getLogger('document_pipeline')
-    doc_handler = logging.handlers.RotatingFileHandler(
-        filename=os.path.join(LOGS_DIR, "document_pipeline.log"),
-        maxBytes=5*1024*1024,  # 5MB
-        backupCount=3,
-        encoding='utf-8'
-    )
-    doc_handler.setFormatter(formatter)
-    doc_logger.addHandler(doc_handler)
-    doc_logger.setLevel(logging.DEBUG)
-    
-    # Message processing logger
-    msg_logger = logging.getLogger('message_pipeline')
-    msg_handler = logging.handlers.RotatingFileHandler(
-        filename=os.path.join(LOGS_DIR, "message_pipeline.log"),
-        maxBytes=5*1024*1024,  # 5MB
-        backupCount=3,
-        encoding='utf-8'
-    )
-    msg_handler.setFormatter(formatter)
-    msg_logger.addHandler(msg_handler)
-    msg_logger.setLevel(logging.DEBUG)
-    
-    # Embedding service logger
-    embed_logger = logging.getLogger('embedding_service')
-    embed_handler = logging.handlers.RotatingFileHandler(
-        filename=os.path.join(LOGS_DIR, "embedding_service.log"),
-        maxBytes=5*1024*1024,  # 5MB
-        backupCount=3,
-        encoding='utf-8'
-    )
-    embed_handler.setFormatter(formatter)
-    embed_logger.addHandler(embed_handler)
-    embed_logger.setLevel(logging.DEBUG)
-    
-    # Database operations logger
-    db_logger = logging.getLogger('database')
-    db_handler = logging.handlers.RotatingFileHandler(
-        filename=os.path.join(LOGS_DIR, "database.log"),
-        maxBytes=5*1024*1024,  # 5MB
-        backupCount=3,
-        encoding='utf-8'
-    )
-    db_handler.setFormatter(formatter)
-    db_logger.addHandler(db_handler)
-    db_logger.setLevel(logging.DEBUG)
-    
-    # Performance logger
-    perf_logger = logging.getLogger('performance')
-    perf_handler = logging.handlers.RotatingFileHandler(
-        filename=os.path.join(LOGS_DIR, "performance.log"),
-        maxBytes=5*1024*1024,  # 5MB
-        backupCount=3,
-        encoding='utf-8'
-    )
-    perf_handler.setFormatter(formatter)
-    perf_logger.addHandler(perf_handler)
-    perf_logger.setLevel(logging.DEBUG)
-    
-    # User interactions logger
-    user_logger = logging.getLogger('user_interactions')
-    user_handler = logging.handlers.RotatingFileHandler(
-        filename=os.path.join(LOGS_DIR, "user_interactions.log"),
-        maxBytes=5*1024*1024,  # 5MB
-        backupCount=3,
-        encoding='utf-8'
-    )
-    user_handler.setFormatter(formatter)
-    user_logger.addHandler(user_handler)
-    user_logger.setLevel(logging.INFO)
+    # Only setup file loggers if we have write permissions
+    try:
+        # Test if we can write to logs directory
+        test_file = os.path.join(LOGS_DIR, ".write_test")
+        with open(test_file, 'w') as f:
+            f.write("test")
+        os.remove(test_file)
+        
+        # Document processing logger
+        doc_logger = logging.getLogger('document_pipeline')
+        doc_handler = logging.handlers.RotatingFileHandler(
+            filename=os.path.join(LOGS_DIR, "document_pipeline.log"),
+            maxBytes=5*1024*1024,  # 5MB
+            backupCount=3,
+            encoding='utf-8'
+        )
+        doc_handler.setFormatter(formatter)
+        doc_logger.addHandler(doc_handler)
+        doc_logger.setLevel(logging.DEBUG)
+        
+        # Message processing logger
+        msg_logger = logging.getLogger('message_pipeline')
+        msg_handler = logging.handlers.RotatingFileHandler(
+            filename=os.path.join(LOGS_DIR, "message_pipeline.log"),
+            maxBytes=5*1024*1024,  # 5MB
+            backupCount=3,
+            encoding='utf-8'
+        )
+        msg_handler.setFormatter(formatter)
+        msg_logger.addHandler(msg_handler)
+        msg_logger.setLevel(logging.DEBUG)
+        
+        # Embedding service logger
+        embed_logger = logging.getLogger('embedding_service')
+        embed_handler = logging.handlers.RotatingFileHandler(
+            filename=os.path.join(LOGS_DIR, "embedding_service.log"),
+            maxBytes=5*1024*1024,  # 5MB
+            backupCount=3,
+            encoding='utf-8'
+        )
+        embed_handler.setFormatter(formatter)
+        embed_logger.addHandler(embed_handler)
+        embed_logger.setLevel(logging.DEBUG)
+        
+        # Database operations logger
+        db_logger = logging.getLogger('database')
+        db_handler = logging.handlers.RotatingFileHandler(
+            filename=os.path.join(LOGS_DIR, "database.log"),
+            maxBytes=5*1024*1024,  # 5MB
+            backupCount=3,
+            encoding='utf-8'
+        )
+        db_handler.setFormatter(formatter)
+        db_logger.addHandler(db_handler)
+        db_logger.setLevel(logging.DEBUG)
+        
+        # Performance logger
+        perf_logger = logging.getLogger('performance')
+        perf_handler = logging.handlers.RotatingFileHandler(
+            filename=os.path.join(LOGS_DIR, "performance.log"),
+            maxBytes=5*1024*1024,  # 5MB
+            backupCount=3,
+            encoding='utf-8'
+        )
+        perf_handler.setFormatter(formatter)
+        perf_logger.addHandler(perf_handler)
+        perf_logger.setLevel(logging.DEBUG)
+        
+        # User interactions logger
+        user_logger = logging.getLogger('user_interactions')
+        user_handler = logging.handlers.RotatingFileHandler(
+            filename=os.path.join(LOGS_DIR, "user_interactions.log"),
+            maxBytes=5*1024*1024,  # 5MB
+            backupCount=3,
+            encoding='utf-8'
+        )
+        user_handler.setFormatter(formatter)
+        user_logger.addHandler(user_handler)
+        user_logger.setLevel(logging.INFO)
+        
+    except (PermissionError, OSError):
+        # If we can't write to files, component loggers will use console only
+        print("⚠️ Component file logging disabled due to permissions")
+        
+        # Set up loggers without file handlers
+        for logger_name in ['document_pipeline', 'message_pipeline', 'embedding_service', 'database', 'performance', 'user_interactions']:
+            logger = logging.getLogger(logger_name)
+            logger.setLevel(logging.DEBUG if logger_name != 'user_interactions' else logging.INFO)
 
 def get_logger(name: str) -> logging.Logger:
     """Get a logger instance for a specific component"""
