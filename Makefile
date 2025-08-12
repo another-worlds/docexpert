@@ -66,13 +66,13 @@ docker-stop: ## Stop docker services
 	docker-compose down
 
 docker-logs: ## View bot logs
-docker-compose logs -f llm-telegram-bot
+	docker-compose logs -f llm-telegram-bot
 
 docker-logs-all: ## View all service logs
 	docker-compose logs -f
 
 docker-restart: ## Restart bot service
-docker-compose restart llm-telegram-bot
+	docker-compose restart llm-telegram-bot
 
 docker-dev: ## Run in development mode
 	docker-compose up
@@ -138,7 +138,7 @@ restart: ## Restart all services
 
 # Logging and monitoring
 logs: ## View application logs
-docker-compose logs -f llm-telegram-bot
+	docker-compose logs -f llm-telegram-bot
 
 logs-db: ## View application logs (no local DB)
 	@echo "⚠️  No local MongoDB container - using MongoDB Atlas cloud"
@@ -189,12 +189,12 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
 
 test: ## Run tests in container
 	@echo "🧪 Running tests..."
-docker-compose exec llm-telegram-bot python -m pytest tests/ -v
+	docker-compose exec llm-telegram-bot python -m pytest tests/ -v
 	@echo "✅ Tests completed!"
 
 test-logging: ## Test logging system
 	@echo "📝 Testing logging system..."
-docker-compose exec llm-telegram-bot python -c "from app.utils.logging import setup_logging; setup_logging(); print('✅ Logging system working!')"
+	docker-compose exec llm-telegram-bot python -c "from app.utils.logging import setup_logging; setup_logging(); print('✅ Logging system working!')"
 
 # Quick Aliases
 up: run ## Alias for run
