@@ -183,9 +183,9 @@ db-backup: ## Backup MongoDB Atlas database
 # Security and Testing
 security-scan: ## Run security scan on images
 	@echo "🔒 Running security scan..."
-docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-	-v $(HOME)/Library/Caches:/root/.cache/ \
-	aquasec/trivy image llm-telegram-bot:latest
+	docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+		-v $(HOME)/Library/Caches:/root/.cache/ \
+		aquasec/trivy image llm-telegram-bot:latest
 
 test: ## Run tests in container
 	@echo "🧪 Running tests..."
