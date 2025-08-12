@@ -1,11 +1,12 @@
 version: '3.8'
 
 services:
-  telegram-bot:
+    llm-telegram-bot:
     build:
       context: .
       dockerfile: Dockerfile.production
     container_name: telegram-bot-prod
+        container_name: llm-telegram-bot-prod
     restart: unless-stopped
     ports:
       - "8000:8000"
@@ -20,13 +21,13 @@ services:
       - LOGS_DIR=/app/logs
       - PYTHONPATH=/app
     volumes:
-      - uploads_data:/app/uploads
-      - logs_data:/app/logs
-      - telegram_bot_data:/app/data
+          - llm_uploads_data:/app/uploads
+          - llm_logs_data:/app/logs
+          - llm_telegram_bot_data:/app/data
     env_file:
       - .env
     networks:
-      - telegram-bot-network
+          - llm-telegram-bot-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -61,7 +62,7 @@ services:
     depends_on:
       - telegram-bot
     networks:
-      - telegram-bot-network
+      - llm-telegram-bot-network
     logging:
       driver: "json-file"
       options:
@@ -73,24 +74,24 @@ services:
     build: ./fluentd
     container_name: telegram-bot-fluentd
     volumes:
-      - logs_data:/fluentd/log
+      - llm_logs_data:/fluentd/log
       - ./fluentd/conf:/fluentd/etc
     ports:
       - "24224:24224"
       - "24224:24224/udp"
     networks:
-      - telegram-bot-network
+      - llm-telegram-bot-network
     depends_on:
       - telegram-bot
 
 volumes:
-  uploads_data:
-    driver: local
-  logs_data:
+  llm_uploads_data:
+  llm_logs_data:
+  llm_telegram_bot_data:
     driver: local
   telegram_bot_data:
-    driver: local
-
+  llm-telegram-bot-network:
+    driver: bridge
 networks:
   telegram-bot-network:
     driver: bridge

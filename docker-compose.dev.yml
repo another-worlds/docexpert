@@ -1,11 +1,11 @@
 version: '3.8'
 
 services:
-  telegram-bot:
+  llm-telegram-bot:
     build: 
       context: .
       dockerfile: Dockerfile
-    container_name: telegram-bot-dev
+    container_name: llm-telegram-bot-dev
     restart: unless-stopped
     ports:
       - "8000:8000"
@@ -24,10 +24,10 @@ services:
     env_file:
       - .env
     networks:
-      - telegram-bot-network
+      - llm-telegram-bot-network
     # Override command for development with auto-reload
     command: ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
 networks:
-  telegram-bot-network:
+  llm-telegram-bot-network:
     driver: bridge

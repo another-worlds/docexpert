@@ -210,97 +210,142 @@ class YouTubeTranscriptHandler:
             return {"error": f"Failed to search transcripts: {str(e)}"}
     
     async def _fetch_transcript(self, video_id: str) -> Dict[str, Any]:
-        """Fetch transcript from YouTube API with enhanced error handling"""
+        """Fetch transcript from YouTube API with enhanced error handling and rate limiting"""
         if not YouTubeTranscriptApi:
             return {"error": "YouTube Transcript API not available. Install with: pip install youtube-transcript-api"}
         
-        try:
-            youtube_logger.info(f"🎥 Fetching transcript for video: {video_id}")
-            
-            # Get available transcripts
+        # Implement exponential backoff for rate limiting
+        max_retries = 3
+        base_delay = 5.0  # Start with 5 second delay to be more respectful
+        
+        for attempt in range(max_retries):
             try:
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                if attempt > 0:
+                    delay = base_delay * (2 ** (attempt - 1))  # Exponential backoff
+                    youtube_logger.info(f"⏳ Rate limit backoff: waiting {delay}s before retry {attempt + 1}")
+                    await asyncio.sleep(delay)
+                
+                youtube_logger.info(f"🎥 Fetching transcript for video: {video_id} (attempt {attempt + 1})")
+                
+                # Add initial delay to be respectful to YouTube's API
+                await asyncio.sleep(2)
+                
+                # Get available transcripts
+                try:
+                    transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                except Exception as e:
+                    error_msg = str(e)
+                    if "429" in error_msg or "Too Many Requests" in error_msg:
+                        youtube_logger.warning(f"🚫 Rate limited while listing transcripts: {video_id}")
+                        if attempt < max_retries - 1:
+                            continue  # Retry with backoff
+                        else:
+                            return {"error": "YouTube API rate limited. Please try again later."}
+                    elif "private" in error_msg.lower():
+                        return {"error": "Video is private or restricted"}
+                    elif "unavailable" in error_msg.lower() or "disabled" in error_msg.lower():
+                        return {"error": "Video is unavailable or has disabled transcripts"}
+                    elif "not found" in error_msg.lower():
+                        return {"error": "Video not found"}
+                    else:
+                        return {"error": f"Failed to access video: {error_msg}"}
+                
+                # Try to get English transcript first, then other languages
+                transcript = None
+                language_priorities = ['en', 'en-US', 'en-GB', 'auto']
+                
+                # First try preferred languages
+                for lang in language_priorities:
+                    try:
+                        transcript = transcript_list.find_transcript([lang])
+                        youtube_logger.info(f"✅ Found transcript in language: {lang}")
+                        break
+                    except:
+                        continue
+                
+                # If no preferred language found, get any available transcript
+                if not transcript:
+                    available_transcripts = []
+                    for t in transcript_list:
+                        available_transcripts.append(t.language_code)
+                    
+                    youtube_logger.info(f"📋 Available transcript languages: {available_transcripts}")
+                    
+                    if available_transcripts:
+                        # Get the first available transcript
+                        transcript = transcript_list.find_transcript([available_transcripts[0]])
+                        youtube_logger.info(f"✅ Using available transcript: {available_transcripts[0]}")
+                    else:
+                        return {"error": "No transcripts available for this video"}
+
+                if not transcript:
+                    return {"error": "No transcript available for this video"}
+
+                # Add another delay before fetching actual transcript data
+                await asyncio.sleep(2)
+
+                # Fetch the actual transcript with error handling
+                try:
+                    transcript_data = transcript.fetch()
+                except Exception as e:
+                    error_msg = str(e)
+                    if "429" in error_msg or "Too Many Requests" in error_msg:
+                        youtube_logger.warning(f"🚫 Rate limited while fetching transcript: {video_id}")
+                        if attempt < max_retries - 1:
+                            continue  # Retry with backoff
+                        else:
+                            return {"error": "YouTube API rate limited. Please try again later."}
+                    else:
+                        youtube_logger.error(f"❌ Failed to fetch transcript data: {error_msg}")
+                        return {"error": f"Failed to fetch transcript: {error_msg}"}
+                
+                if not transcript_data:
+                    return {"error": "Transcript data is empty"}
+                
+                youtube_logger.info(f"📝 Successfully fetched transcript with {len(transcript_data)} entries in {transcript.language_code}")
+                
+                # Try to get video metadata (basic info from transcript API)
+                video_title = f"YouTube Video {video_id}"
+                
+                # Some transcripts might have video title in metadata
+                try:
+                    if hasattr(transcript, 'video_title'):
+                        video_title = transcript.video_title
+                except:
+                    pass
+                
+                return {
+                    "transcript": transcript_data,
+                    "language": transcript.language_code,
+                    "title": video_title,
+                    "description": "",
+                    "video_id": video_id
+                }
+                
             except Exception as e:
                 error_msg = str(e)
-                if "private" in error_msg.lower():
-                    return {"error": "Video is private or restricted"}
-                elif "unavailable" in error_msg.lower() or "disabled" in error_msg.lower():
-                    return {"error": "Video is unavailable or has disabled transcripts"}
-                elif "not found" in error_msg.lower():
-                    return {"error": "Video not found"}
-                else:
-                    return {"error": f"Failed to access video: {error_msg}"}
-            
-            # Try to get English transcript first, then other languages
-            transcript = None
-            language_priorities = ['en', 'en-US', 'en-GB', 'auto']
-            
-            # First try preferred languages
-            for lang in language_priorities:
-                try:
-                    transcript = transcript_list.find_transcript([lang])
-                    youtube_logger.info(f"✅ Found transcript in language: {lang}")
-                    break
-                except:
-                    continue
-            
-            # If no preferred language found, get any available transcript
-            if not transcript:
-                available_transcripts = []
-                for t in transcript_list:
-                    available_transcripts.append(t.language_code)
+                youtube_logger.error(f"❌ Attempt {attempt + 1} failed: {error_msg}")
                 
-                youtube_logger.info(f"📋 Available transcript languages: {available_transcripts}")
+                # Check if it's a rate limiting error
+                if "429" in error_msg or "Too Many Requests" in error_msg:
+                    if attempt < max_retries - 1:
+                        continue  # Retry with backoff
+                    else:
+                        return {"error": "YouTube API rate limited after multiple attempts. Please try again later."}
                 
-                if available_transcripts:
-                    # Get the first available transcript
-                    transcript = transcript_list.find_transcript([available_transcripts[0]])
-                    youtube_logger.info(f"✅ Using available transcript: {available_transcripts[0]}")
-                else:
-                    return {"error": "No transcripts available for this video"}
-
-            if not transcript:
-                return {"error": "No transcript available for this video"}
-
-            # Fetch the actual transcript
-            transcript_data = transcript.fetch()
-            
-            if not transcript_data:
-                return {"error": "Transcript data is empty"}
-            
-            youtube_logger.info(f"📝 Fetched transcript with {len(transcript_data)} entries in {transcript.language_code}")
-            
-            # Try to get video metadata (basic info from transcript API)
-            video_title = f"YouTube Video {video_id}"
-            
-            # Some transcripts might have video title in metadata
-            try:
-                if hasattr(transcript, 'video_title'):
-                    video_title = transcript.video_title
-            except:
-                pass
-            
-            return {
-                "transcript": transcript_data,
-                "language": transcript.language_code,
-                "title": video_title,
-                "description": "",
-                "video_id": video_id
-            }
-            
-        except Exception as e:
-            error_msg = str(e)
-            youtube_logger.error(f"❌ Failed to fetch transcript: {error_msg}")
-            
-            # Provide more specific error messages
-            if "No transcripts were found" in error_msg:
-                return {"error": "No transcripts available for this video"}
-            elif "Could not retrieve a transcript" in error_msg:
-                return {"error": "Transcript could not be retrieved (may be disabled)"}
-            elif "HTTP Error 404" in error_msg:
-                return {"error": "Video not found"}
-            else:
-                return {"error": f"Failed to fetch transcript: {error_msg}"}
+                # For other errors on final attempt, return them
+                if attempt == max_retries - 1:
+                    if "No transcripts were found" in error_msg:
+                        return {"error": "No transcripts available for this video"}
+                    elif "Could not retrieve a transcript" in error_msg:
+                        return {"error": "Transcript could not be retrieved (may be disabled)"}
+                    elif "HTTP Error 404" in error_msg:
+                        return {"error": "Video not found"}
+                    else:
+                        return {"error": f"Failed to fetch transcript: {error_msg}"}
+        
+        # This should never be reached, but just in case
+        return {"error": "Failed to fetch transcript after all retry attempts"}
     
     async def _process_transcript_chunks(self, transcript_data: List[Dict], video_id: str) -> List[TranscriptChunk]:
         """Process transcript into chunks suitable for embedding"""
