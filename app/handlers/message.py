@@ -249,18 +249,18 @@ Observation: the result of the action"""),
             return {"context": "", "sources": [], "available_docs": [], "stats": {}}
     
     async def process_messages(self, messages: List[Dict[str, Any]], user_id: str) -> str:
-        """Process a batch of messages"""
+        """Process a batch of messages, letting the agent use tools as needed"""
         msg_logger.info(f"💬 Starting message processing for user {user_id}")
         msg_logger.info(f"📊 Processing {len(messages)} message(s)")
-        
-        # Set current user_id for tools
+
+        # Set current user_id for tools (if needed by sync tools)
         self.current_user_id = user_id
-        
+
         # Log message details
         for i, msg in enumerate(messages):
             msg_logger.debug(f"📝 Message {i+1}: '{msg.get('message', '')[:100]}...'")
             msg_logger.debug(f"⏰ Timestamp: {msg.get('timestamp')}")
-        
+
         # Get recent conversation history from MongoDB
         msg_logger.debug("📚 Fetching conversation history")
         recent_history = list(self.db.message_queue.find({
@@ -268,33 +268,33 @@ Observation: the result of the action"""),
             "is_processed": True,
             "response": {"$exists": True}
         }).sort("timestamp", -1).limit(5))
-        
+
         msg_logger.info(f"📜 Found {len(recent_history)} recent conversation entries")
-        
+
         # Format conversation history for context
         conversation_context = []
         for msg in reversed(recent_history):
             conversation_context.append(f"User: {msg['message']}")
             if msg.get('response'):
                 conversation_context.append(f"Assistant: {msg['response']}")
-        
+
         msg_logger.debug(f"🔗 Built conversation context with {len(conversation_context)} entries")
-        
+
         # Combine messages
         combined_message = " ".join([msg["message"] for msg in messages])
         msg_logger.info(f"📝 Combined message length: {len(combined_message)} characters")
         msg_logger.debug(f"📄 Combined message preview: '{combined_message[:200]}...'")
-        
+
         # Detect language
         msg_logger.debug("🌍 Detecting message language")
         detected_lang = detect_language(combined_message)
         msg_logger.info(f"🗣️  Detected language: {detected_lang}")
-        
+
         # Normalize if Turkish
         if detected_lang == 'tr':
             msg_logger.debug("🔄 Applying Turkish text normalization")
             combined_message = normalize_text(combined_message)
-        
+
         # Get user memory and update with recent history
         msg_logger.debug("🧠 Updating user memory with conversation history")
         memory = self.get_user_memory(user_id)
@@ -303,80 +303,22 @@ Observation: the result of the action"""),
                 memory.chat_memory.add_user_message(msg[6:])
             elif msg.startswith("Assistant: "):
                 memory.chat_memory.add_ai_message(msg[11:])
-        
+
         msg_logger.debug(f"💭 Memory updated with {len(conversation_context)} context entries")
-        
+
         try:
-            msg_logger.info("🚀 Starting AI response generation")
-            # 1. Generate semantic variations of the query
-            semantic_variations = [
-                combined_message,  # Original query
-                f"find information about {combined_message}",
-                f"what does the document say about {combined_message}",
-                combined_message.replace("?", "").strip()  # Clean query
-            ]
-            
-            # 2. Search documents with all variations
-            all_responses = []
-            for variation in semantic_variations:
-                response = await self.query_documents(variation, user_id, k=5)
-                if response and response.get("answer"):
-                    all_responses.append(response)
-            
-            # 3. Get additional context
-            doc_context = await self.get_document_context(combined_message, user_id)
-            
-            # 4. Prepare enhanced context
-            context_parts = []
-            
-            # Add conversation history
-            if conversation_context:
-                context_parts.append("Previous Conversation:")
-                context_parts.extend(conversation_context[-6:])  # Last 3 exchanges
-                context_parts.append("")
-            
-            # Add available documents
-            if doc_context['available_docs']:
-                if detected_lang == 'tr':
-                    context_parts.append("Mevcut Dokümanlar:")
-                else:
-                    context_parts.append("Available Documents:")
-                context_parts.extend(doc_context['available_docs'])
-                context_parts.append("")
-            
-            # Add relevant content from semantic searches
-            if all_responses:
-                for response in all_responses:
-                    context_parts.append(response["answer"])
-                context_parts.append("")
-            
-            # 5. Create enhanced message with clear instructions
-            enhanced_message = f"""User Question: {combined_message}
-
-Previous Context:
-{chr(10).join(conversation_context[-6:])}
-
-Document Context:
-{chr(10).join(context_parts)}
-
-Instructions:
-1. Consider the previous conversation context when responding
-2. Provide a direct and natural response
-3. Don't mention that you're using documents or sources
-4. Keep the response concise and focused
-5. Use a conversational but professional tone
-6. Respond in {detected_lang} language
-7. If information isn't available, say so briefly
-"""
-            
-            # 6. Use agent with enhanced context
-            agent_response = await self.agent.ainvoke({
-                "input": enhanced_message,
+            msg_logger.info("🚀 Starting AI response generation (agentic pipeline)")
+            # Let the agent decide when to use tools (document/youtube search)
+            # Provide only the user query and conversation context
+            agent_context = {"user_id": user_id}
+            self.agent._current_context = agent_context  # For tool context if needed
+            agent_response = await self.agent.agent.ainvoke({
+                "input": combined_message,
                 "chat_history": memory.chat_memory.messages
             })
             response = agent_response.get("output", "")
-            
-            # 7. Update conversation history with document usage information
+
+            # Optionally, update conversation history with tool usage info if desired
             self.db.message_queue.update_one(
                 {"_id": messages[-1]["_id"]},
                 {
@@ -385,29 +327,19 @@ Instructions:
                             "user_message": combined_message,
                             "assistant_response": response,
                             "language": detected_lang,
-                            "document_context_used": True,
+                            "agentic_tools_used": True,
                             "previous_context_used": bool(conversation_context),
-                            "documents_referenced": [
-                                source["metadata"]["file_name"]
-                                for source in doc_context.get("sources", [])
-                            ],
-                            "semantic_variations_used": len(all_responses),
-                            "total_chunks_used": len(doc_context.get("sources", [])),
                             "timestamp": datetime.utcnow()
                         }
                     }
                 }
             )
-            
+
             return response
-            
+
         except Exception as e:
             print(f"Error in process_messages: {str(e)}")
-            # Fall back to direct document content if available
-            if all_responses and all_responses[0].get("answer"):
-                return all_responses[0]["answer"]
-            
-            return "Sorry, I couldn't find relevant information in your documents or an error occurred."
+            return "Sorry, I couldn't process your request or an error occurred."
     
     async def process_message_queue(self, user_id: str):
         """Process messages in the queue for a user"""
