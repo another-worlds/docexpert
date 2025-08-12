@@ -20,7 +20,7 @@ services:
     volumes:
       - ./uploads:/app/uploads
       - ./logs:/app/logs:rw
-  - llm_telegram_bot_data:/app/data
+      - llm_telegram_bot_data:/app/data
     env_file:
       - .env
     networks:
