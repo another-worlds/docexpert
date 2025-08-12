@@ -312,7 +312,7 @@ Observation: the result of the action"""),
             # Provide only the user query and conversation context
             agent_context = {"user_id": user_id}
             self.agent._current_context = agent_context  # For tool context if needed
-            agent_response = await self.agent.agent.ainvoke({
+            agent_response = await self.agent.agent.arun({
                 "input": combined_message,
                 "chat_history": memory.chat_memory.messages
             })

@@ -36,7 +36,6 @@ class LangChainConversationAgent(ConversationAgent):
         )
         self.tools: Dict[str, AITool] = {}
         self.memory_manager = memory_manager
-        self.agent = None
         self._setup_default_tools()
         self._setup_agent()
     
@@ -161,12 +160,14 @@ class LangChainConversationAgent(ConversationAgent):
                 message, user_id, detected_lang, context
             )
 
-            # Process with agent
-            agent_response = await self.agent.ainvoke({
+
+            # Process with agent (ensure agent is initialized)
+            if not self.agent:
+                raise RuntimeError("LangChain agent is not initialized.")
+            agent_response = await self.agent.arun({
                 "input": enhanced_message,
                 "chat_history": memory.chat_memory.messages
             })
-
             response_content = agent_response.get("output", "")
 
             # Log model answer
