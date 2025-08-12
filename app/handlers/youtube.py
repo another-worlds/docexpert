@@ -289,15 +289,20 @@ class YouTubeTranscriptHandler:
                     transcript_data = transcript.fetch()
                 except Exception as e:
                     error_msg = str(e)
-                    if "429" in error_msg or "Too Many Requests" in error_msg:
-                        youtube_logger.warning(f"🚫 Rate limited while fetching transcript: {video_id}")
+                    error_type = type(e).__name__
+                    status_code = getattr(e, 'status_code', None)
+                    details = f"{error_type}: {error_msg}"
+                    if status_code:
+                        details += f" (HTTP {status_code})"
+                    if "429" in error_msg or "Too Many Requests" in error_msg or (status_code == 429):
+                        youtube_logger.warning(f"🚫 Rate limited while fetching transcript: {video_id} | {details}")
                         if attempt < max_retries - 1:
                             continue  # Retry with backoff
                         else:
-                            return {"error": "YouTube API rate limited. Please try again later."}
+                            return {"error": f"YouTube API rate limited. Details: {details}"}
                     else:
-                        youtube_logger.error(f"❌ Failed to fetch transcript data: {error_msg}")
-                        return {"error": f"Failed to fetch transcript: {error_msg}"}
+                        youtube_logger.error(f"❌ Failed to fetch transcript data: {details}")
+                        return {"error": f"Failed to fetch transcript: {details}"}
                 
                 if not transcript_data:
                     return {"error": "Transcript data is empty"}
@@ -324,15 +329,18 @@ class YouTubeTranscriptHandler:
                 
             except Exception as e:
                 error_msg = str(e)
-                youtube_logger.error(f"❌ Attempt {attempt + 1} failed: {error_msg}")
-                
+                error_type = type(e).__name__
+                status_code = getattr(e, 'status_code', None)
+                details = f"{error_type}: {error_msg}"
+                if status_code:
+                    details += f" (HTTP {status_code})"
+                youtube_logger.error(f"❌ Attempt {attempt + 1} failed: {details}")
                 # Check if it's a rate limiting error
-                if "429" in error_msg or "Too Many Requests" in error_msg:
+                if "429" in error_msg or "Too Many Requests" in error_msg or (status_code == 429):
                     if attempt < max_retries - 1:
                         continue  # Retry with backoff
                     else:
-                        return {"error": "YouTube API rate limited after multiple attempts. Please try again later."}
-                
+                        return {"error": f"YouTube API rate limited after multiple attempts. Details: {details}"}
                 # For other errors on final attempt, return them
                 if attempt == max_retries - 1:
                     if "No transcripts were found" in error_msg:
@@ -342,7 +350,7 @@ class YouTubeTranscriptHandler:
                     elif "HTTP Error 404" in error_msg:
                         return {"error": "Video not found"}
                     else:
-                        return {"error": f"Failed to fetch transcript: {error_msg}"}
+                        return {"error": f"Failed to fetch transcript: {details}"}
         
         # This should never be reached, but just in case
         return {"error": "Failed to fetch transcript after all retry attempts"}
