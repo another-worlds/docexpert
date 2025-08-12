@@ -164,7 +164,7 @@ class LangChainConversationAgent(ConversationAgent):
             # Process with agent (ensure agent is initialized)
             if not self.agent:
                 raise RuntimeError("LangChain agent is not initialized.")
-            agent_response = await self.agent.arun({
+            agent_response = await self.agent.invoke({
                 "input": enhanced_message,
                 "chat_history": memory.chat_memory.messages
             })
