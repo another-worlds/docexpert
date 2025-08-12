@@ -4,6 +4,22 @@ Logging configuration for the Telegram Multi-Agent AI Bot
 
 import logging
 import logging.handlers
+
+CONVERSATION_LEVEL = 25  # Between INFO (20) and WARNING (30)
+logging.addLevelName(CONVERSATION_LEVEL, "CONVERSATION")
+def log_user_query(user_id, user_name, query):
+    logger = logging.getLogger("conversation")
+    logger.log(
+        CONVERSATION_LEVEL,
+        f"User Query | Time: {datetime.now().isoformat()} | UserID: {user_id} | Name: {user_name} | Query: {query}"
+    )
+
+def log_model_answer(user_id, user_name, answer):
+    logger = logging.getLogger("conversation")
+    logger.log(
+        CONVERSATION_LEVEL,
+        f"Model Answer | Time: {datetime.now().isoformat()} | UserID: {user_id} | Name: {user_name} | Answer: {answer}"
+    )
 import os
 import time
 from typing import Optional, Any, Dict
@@ -27,7 +43,12 @@ def setup_logging():
     
     # Root logger
     root_logger = logging.getLogger()
-    root_logger.setLevel(getattr(logging, LOG_LEVEL.upper()))
+    # Support custom CONVERSATION log level
+    level = LOG_LEVEL.upper()
+    if level == "CONVERSATION":
+        root_logger.setLevel(CONVERSATION_LEVEL)
+    else:
+        root_logger.setLevel(getattr(logging, level))
     
     # Clear existing handlers
     root_logger.handlers.clear()
@@ -54,7 +75,10 @@ def setup_logging():
             backupCount=5,
             encoding='utf-8'
         )
-        file_handler.setLevel(getattr(logging, LOG_LEVEL.upper()))
+        if level == "CONVERSATION":
+            file_handler.setLevel(CONVERSATION_LEVEL)
+        else:
+            file_handler.setLevel(getattr(logging, level))
         file_handler.setFormatter(detailed_formatter)
         root_logger.addHandler(file_handler)
         

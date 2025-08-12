@@ -11,7 +11,7 @@ import asyncio
 
 from ..config import WAIT_TIME, MAX_MESSAGES_PER_BATCH
 from ..database.mongodb import db
-from ..utils.logging import get_logger
+from ..utils.logging import get_logger, log_user_query, log_model_answer
 from ..ai.service import ai_service
 
 # Setup dedicated logger for message pipeline
@@ -25,46 +25,52 @@ class TelegramMessageHandler:
         self.db = db
         self.ai_service = ai_service
     
-    async def process_message_queue(self, user_id: str) -> str:
+    async def process_message_queue(self, user_id: str, user_name: str = "unknown") -> str:
         """Process messages in the queue for a user"""
         msg_logger.info(f"📥 Processing message queue for user {user_id}")
-        
         try:
             # Wait for additional messages (batching)
             await asyncio.sleep(WAIT_TIME)
-            
+
             # Get cutoff time
             current_time = datetime.utcnow()
             cutoff_time = current_time - timedelta(minutes=5)
-            
+
             # Get pending messages
             messages = self.db.get_pending_messages(user_id, cutoff_time, MAX_MESSAGES_PER_BATCH)
-            
+
             if not messages:
                 msg_logger.debug(f"📭 No pending messages for user {user_id}")
                 return ""
-            
+
             msg_logger.info(f"📊 Found {len(messages)} pending messages for user {user_id}")
-            
+
+            # Log each user query
+            for msg in messages:
+                log_user_query(user_id, msg.get("username", user_name), msg.get("text", ""))
+
             # Generate batch ID and mark messages as being processed
             batch_id = str(datetime.utcnow())
             message_ids = [msg["_id"] for msg in messages]
-            
+
             self.db.mark_messages_as_processed(message_ids, batch_id)
             msg_logger.debug(f"🏷️ Marked messages as processed with batch ID: {batch_id}")
-            
+
             # Process messages with AI service
             response = await self.ai_service.process_user_messages(messages, user_id)
-            
+
+            # Log model answer
+            log_model_answer(user_id, user_name, response)
+
             # Update messages with response
             self.db.update_message_response(batch_id, response)
             msg_logger.info(f"✅ Successfully processed and stored response for user {user_id}")
-            
+
             return response
-            
+
         except Exception as e:
             msg_logger.error(f"❌ Error processing messages for user {user_id}: {str(e)}")
-            
+
             # Mark messages with error if we have message_ids
             if 'message_ids' in locals():
                 self.db.message_queue.update_many(
@@ -76,7 +82,7 @@ class TelegramMessageHandler:
                         }
                     }
                 )
-            
+
             # Return a user-friendly error message
             return "Sorry, I encountered an error while processing your message. Please try again."
     

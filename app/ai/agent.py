@@ -17,7 +17,7 @@ from .base import ConversationAgent, AITool, AIResponse
 from .memory import memory_manager
 from .tools import AVAILABLE_TOOLS, create_tool
 from ..config import LLM_MODEL, LLM_TEMPERATURE, XAI_API_KEY
-from ..utils.logging import get_logger
+from ..utils.logging import get_logger, log_user_query, log_model_answer
 from ..utils.text import normalize_text
 from ..utils.language import detect_language
 
@@ -129,45 +129,52 @@ class LangChainConversationAgent(ConversationAgent):
         self, 
         message: str, 
         user_id: str, 
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
+        user_name: str = "unknown"
     ) -> AIResponse:
         """Process a user message and return an AI response"""
         agent_logger.info(f"🚀 Processing message for user {user_id}")
         agent_logger.debug(f"📝 Message: {message[:100]}...")
-        
+
+        # Log user query
+        log_user_query(user_id, user_name, message)
+
         try:
             # Set current context for tools
             self._current_context = context or {}
             self._current_context['user_id'] = user_id
-            
+
             # Detect language
             detected_lang = detect_language(message)
             agent_logger.info(f"🌍 Detected language: {detected_lang}")
-            
+
             # Normalize text if Turkish
             if detected_lang == 'tr':
                 message = normalize_text(message)
                 agent_logger.debug("🔄 Applied Turkish text normalization")
-            
+
             # Get memory for user
             memory = await self.memory_manager.get_memory(user_id)
-            
+
             # Build enhanced message with context
             enhanced_message = await self._build_enhanced_message(
                 message, user_id, detected_lang, context
             )
-            
+
             # Process with agent
             agent_response = await self.agent.ainvoke({
                 "input": enhanced_message,
                 "chat_history": memory.chat_memory.messages
             })
-            
+
             response_content = agent_response.get("output", "")
-            
+
+            # Log model answer
+            log_model_answer(user_id, user_name, response_content)
+
             # Update memory
             await self.memory_manager.update_memory(user_id, message, response_content)
-            
+
             # Create AI response
             ai_response = AIResponse(
                 content=response_content,
@@ -177,10 +184,10 @@ class LangChainConversationAgent(ConversationAgent):
                     "tools_available": len(self.tools)
                 }
             )
-            
+
             agent_logger.info(f"✅ Successfully processed message for user {user_id}")
             return ai_response
-            
+
         except Exception as e:
             agent_logger.error(f"❌ Error processing message: {str(e)}")
             return AIResponse(

@@ -20,9 +20,12 @@ from ..utils.logging import db_logger, log_async_performance, log_performance
 class MongoDB:
     def __init__(self):
         db_logger.info("🔗 Initializing MongoDB connection")
-        db_logger.debug(f"📍 Connection URI: {MONGODB_URI[:30]}...")
-        db_logger.debug(f"🗃️  Database: {MONGODB_DB_NAME}")
-        
+        safe_uri = MONGODB_URI
+        if '@' in safe_uri:
+            safe_uri = 'mongodb+srv://' + safe_uri.split('@', 1)[1]
+        db_logger.info(f"📍 Connection URI: {safe_uri}")
+        db_logger.info(f"🗃️  Database: {MONGODB_DB_NAME}")
+
         # Enhanced connection settings for MongoDB Atlas
         self.client = MongoClient(
             MONGODB_URI,
@@ -41,10 +44,14 @@ class MongoDB:
         self.db = self.client[MONGODB_DB_NAME]
         self.message_queue = self.db[MONGODB_COLLECTIONS["messages"]]
         self.documents = self.db[MONGODB_COLLECTIONS["documents"]]
-        
+
         db_logger.info("✅ MongoDB client initialized")
-        db_logger.debug(f"📋 Collections: {list(MONGODB_COLLECTIONS.values())}")
-        
+        try:
+            collection_names = self.db.list_collection_names()
+            db_logger.info(f"� Available collections: {collection_names}")
+        except Exception as e:
+            db_logger.warning(f"⚠️ Could not list collections: {e}")
+
         # Test connection
         self._test_connection()
         self._setup_indexes()

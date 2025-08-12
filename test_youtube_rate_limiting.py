@@ -77,8 +77,9 @@ async def test_youtube_with_rate_limiting():
             if transcript_data:
                 print("\n📜 First few transcript entries:")
                 for i, entry in enumerate(transcript_data[:3]):
-                    text = entry.get('text', '').strip()
-                    start = entry.get('start', 0)
+                    # FetchedTranscriptSnippet is likely an object, not a dict
+                    text = getattr(entry, 'text', '')
+                    start = getattr(entry, 'start', 0)
                     print(f"  {i+1}. [{start:.1f}s] {text[:100]}...")
             
             return True
